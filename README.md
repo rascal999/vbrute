@@ -1,4 +1,4 @@
-vbrute
-======
+autotools-template
+==================
 
-Virtual hosts bruter
+Autotools template project
