@@ -1,7 +1,7 @@
 # Prelude.
 AC_PREREQ([2.69])
 AC_CONFIG_AUX_DIR([build-aux])
-AC_CONFIG_SRCDIR([src/main.c])
+AC_CONFIG_SRCDIR([src/vbrute.c])
 AC_INIT([project-main], [0.1], [aidan.marlin+github@gmail.com])
 AM_INIT_AUTOMAKE([foreign -Wall -Werror])
 PKG_CHECK_MODULES([CHECK], [check >= 0.9.4])
