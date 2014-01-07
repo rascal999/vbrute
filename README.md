@@ -6,4 +6,4 @@ IPs and vbrute will try them.
 
 Usage:
 
-vbrute <domainsFile> <ipsFile>
+vbrute domainsFile ipsFile
