@@ -32,7 +32,7 @@ int debugPrintf(char msg[1024], ...)
 int printResult(struct evhttp_request *req, Items *items)
 {
    /* domain, ip, response code, lengeth */
-   printf("%-24.24s%-16.16s%-10u%-10.10s\n",items->domain[items->domainPtr],items->ip[items->ipPtr],req->response_code,evhttp_find_header(req->input_headers, "Content-Length"));
+   printf("%-24.24s %-16.16s %-10u %-10.10s\n",items->domain[items->domainPtr],items->ip[items->ipPtr],req->response_code,evhttp_find_header(req->input_headers, "Content-Length"));
 }
 
 void reqhandler(struct evhttp_request *req, void *vItems)
@@ -57,7 +57,7 @@ void reqhandler(struct evhttp_request *req, void *vItems)
 void process_timeout(int fd, short event, void *vItems)
 {
    Items *items = (Items *) vItems;
-   printf("%-24.24s%-16.16s*** Timed out ***\n",items->domain[items->domainPtr],items->ip[items->ipPtr]);
+   printf("%-24.24s %-16.16s *** Timed out ***\n",items->domain[items->domainPtr],items->ip[items->ipPtr]);
 
    if (items->conn_finished == 0) {
       evhttp_cancel_request(items->req);
@@ -269,7 +269,7 @@ int main(int argc, char **argv)
    {
       /* domain, ip, response code, lengeth */
       printf("--------------------------------------------------------------\n");
-      printf("Domain                  IP              Code      Length\n");
+      printf("Domain                   IP               Code      Length\n");
       printf("--------------------------------------------------------------\n");
       /* for domains in file */
       for(items.domainPtr=0;items.domainPtr<domainArraySize;items.domainPtr++)
