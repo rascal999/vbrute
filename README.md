@@ -10,6 +10,7 @@ vbrute domainsFile ipsFile
 
 Sample output:
 
+```
 -----------------------------------------------------------
 Domain                  IP              Code      Length
 -----------------------------------------------------------
@@ -22,3 +23,4 @@ Domain                  IP              Code      Length
 google.com              173.194.41.88   301       219       
 cnn.com                 173.194.41.88   302       219       
 test.com                173.194.41.88   302       219
+```
