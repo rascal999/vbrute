@@ -6,13 +6,17 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define DEF_SIZE_DOMAIN 128
+#define DEF_SIZE_FILENAME 128
+
 #include "../src/vbrute.h"
 
-#define DEBUG 0
+int argDebug, argTimeout = 5;
+char argDomainFile[DEF_SIZE_FILENAME], argIPFile[DEF_SIZE_FILENAME];
 
 int debugPrintf(char msg[1024], ...)
 {
-   if (DEBUG == 1)
+   if (argDebug == 1)
    {
       va_list args;
       va_start(args, msg);
@@ -36,6 +40,8 @@ void reqhandler(struct evhttp_request *req, void *vItems)
    /* Typecast */
    Items *items = (Items *) vItems;
 
+   items->conn_finished = 1;
+
    if (req == NULL) {
       debugPrintf("timed out!\n");
    } else if (req->response_code == 0) {
@@ -48,25 +54,38 @@ void reqhandler(struct evhttp_request *req, void *vItems)
    event_loopexit(NULL);
 }
 
-//int doHTTPRequest(Items *items, char *domain, const char *addr)
+void process_timeout(int fd, short event, void *vItems)
+{
+   Items *items = (Items *) vItems;
+   printf("%-24.24s%-16.16s*** Timed out ***\n",items->domain[items->domainPtr],items->ip[items->ipPtr]);
+
+   if (items->conn_finished == 0) {
+      evhttp_cancel_request(items->req);
+   }
+}
+
 int doHTTPRequest(Items *items)
 {
-   const char *state = "misc. state you can pass as argument to your handler";
+   struct event ev;
    unsigned int port = 80;
-   struct evhttp_connection *conn;
-   struct evhttp_request *req;
+
+   items->conn_finished = 0;
 
    debugPrintf("initializing libevent subsystem..\n");
    event_init();
 
-   //conn = evhttp_connection_new(addr, port);
-   conn = evhttp_connection_new(items->ip[items->ipPtr], port);
+   items->conn = evhttp_connection_new(items->ip[items->ipPtr], port);
+   /* If user sets timeout > than this then the user will not know the site timed out ... */
+   evhttp_connection_set_timeout(items->conn, 120);
 
-   req = evhttp_request_new(reqhandler, items);
-   //evhttp_add_header(req->output_headers, "Host", domain);
-   evhttp_add_header(req->output_headers, "Host", items->domain[items->domainPtr]);
-   evhttp_add_header(req->output_headers, "Content-Length", "0");
-   evhttp_make_request(conn, req, EVHTTP_REQ_GET, "/");
+   items->req = evhttp_request_new(reqhandler, items);
+   evhttp_add_header(items->req->output_headers, "Host", items->domain[items->domainPtr]);
+   evhttp_add_header(items->req->output_headers, "Content-Length", "0");
+   evhttp_make_request(items->conn, items->req, EVHTTP_REQ_GET, "/");
+
+   evtimer_set(&ev, process_timeout, (void*) items);
+   evtimer_add(&ev, &items->config->tv);
+
    event_dispatch();
 
    return 0;
@@ -85,7 +104,12 @@ char readFile(char *fileName, char itemArray[ITEMS_MAX][ITEM_LENGTH_MAX])
    FILE *file;
    int c;
 
-   file = fopen(fileName, "r");
+   if (!(file = fopen(fileName, "r")))
+   {
+      /* TODO Error function */
+      printf("Could not open file\n");
+      exit(1);
+   }
 
    while(fgets(itemArray[c++],sizeof(itemArray[ITEMS_MAX]),file))
    {
@@ -93,41 +117,166 @@ char readFile(char *fileName, char itemArray[ITEMS_MAX][ITEM_LENGTH_MAX])
       debugPrintf("readFile itemArray[c] == %s\n", itemArray[c-1]);
    }
 
+   fclose(file);
+
    /* Array size */
    return c-1;
+}
+
+int showHelp()
+{
+   printf("vbrute --domain-file <domain-file> --ip-file <ip-file>\n\n");
+   printf("-d, --domain-file   Specify file containing a list of domains you want to test\n");
+   printf("-i, --ip-file       Specify file containing a list of IP addresses you want to test\n");
+   printf("-t, --timeout       Specify request timeout. Default is 5 seconds\n");
+
+   exit(1);
+}
+
+int assignArgs(int argc, char **argv)
+{
+   /* Flag set by '--verbose'. */
+   static int argVerboseFlag;
+
+   int c;
+     
+   while (1)
+   {
+      static struct option long_options[] =
+      {
+         /* These options set a flag. */
+         {"verbose",     no_argument,       &argVerboseFlag, 1},
+         {"debug",       no_argument,       &argDebug,       1},
+         //{"brief",       no_argument,       &argVerboseFlag,    0},
+         /* These options don't set a flag.
+            We distinguish them by their indices. */
+         {"timeout",      required_argument, 0, 't'},
+         {"domain-file",  required_argument, 0, 'd'},
+         {"ip-file",      required_argument, 0, 'i'},
+         {0, 0, 0, 0}
+      };
+
+      /* getopt_long stores the option index here. */
+      int option_index = 0;
+     
+      c = getopt_long(argc, argv, "t:d:i:", long_options, &option_index);
+
+      debugPrintf("assignArgs argc == %d\n", argc);
+
+      /* domain is only required argument (ip can be determined via domain) */
+      if (argc == 1)
+      {
+         /* Only binary called */
+         showHelp();
+      }
+ 
+      /* Detect the end of the options. */
+      if (c == -1)
+         break;
+     
+      switch (c)
+      {
+         case 0:
+            /* If this option set a flag, do nothing else now. */
+            if (long_options[option_index].flag != 0)
+               break;
+
+            debugPrintf("option %s", long_options[option_index].name);
+            if (optarg)
+               debugPrintf(" with arg %s", optarg);
+            debugPrintf("\n");
+            break;
+
+         case 't':
+            debugPrintf("option -t with value `%s'\n", optarg);
+            /* Str to int TODO */
+            char *endptr;
+            argTimeout = strtol(optarg,&endptr,10);
+            break;
+
+         case 'd':
+            debugPrintf("option -d with value `%s'\n", optarg);
+            strncpy(argDomainFile, optarg, DEF_SIZE_FILENAME);
+            break;
+
+         case 'i':
+            debugPrintf("option -i with value `%s'\n", optarg);
+            strncpy(argIPFile, optarg, DEF_SIZE_FILENAME);
+            break;
+
+         case '?':
+            /* getopt_long already printed an error message. */
+            break;
+
+         default:
+            debugPrintf("assignArgs abort to be called\n");
+            abort();
+      }
+   }
+
+   /* Instead of reporting '--verbose'
+      and '--brief' as they are encountered,
+      we report the final status resulting from them. */
+   if (argVerboseFlag)
+      puts ("verbose flag is set");
+    
+   /* Print any remaining command line arguments (not options). */
+   if (optind < argc)
+   {
+      debugPrintf ("non-option ARGV-elements: ");
+      while (optind < argc)
+         debugPrintf ("%s ", argv[optind++]);
+      putchar ('\n');
+   }
+
+   /* Required arguments */
+   if (argDomainFile[0] == '\0' || argIPFile[0] == '\0')
+   {
+      /* Only binary called */
+      showHelp();
+   }
+ 
+   return 0;
 }
 
 int main(int argc, char **argv)
 {
    Items items;
+   Config config;
+
+   argDomainFile[0] = '\0';
+   argIPFile[0] = '\0';
+
+   assignArgs(argc,argv);
+
+   items.config = &config;
+
+   items.config->tv.tv_sec = argTimeout;
+   items.config->tv.tv_usec = argTimeout * 1000;
 
    char domainFile[ITEM_LENGTH_MAX], ipFile[ITEM_LENGTH_MAX];
    int i, j, domainArraySize, ipArraySize;
 
-   strcpy(domainFile,argv[1]);
-   strcpy(ipFile,argv[2]);
-
    /* domain is 2d array */
-   domainArraySize = readFile(domainFile,items.domain);
+   domainArraySize = readFile(argDomainFile,items.domain);
    /* ip is 2d array */
-   ipArraySize = readFile(ipFile,items.ip);
+   ipArraySize = readFile(argIPFile,items.ip);
 
    /* for ips in file */
    for(items.ipPtr=0;items.ipPtr<ipArraySize;items.ipPtr++)
    {
       /* domain, ip, response code, lengeth */
-      printf("-----------------------------------------------------------\n");
+      printf("--------------------------------------------------------------\n");
       printf("Domain                  IP              Code      Length\n");
-      printf("-----------------------------------------------------------\n");
+      printf("--------------------------------------------------------------\n");
       /* for domains in file */
       for(items.domainPtr=0;items.domainPtr<domainArraySize;items.domainPtr++)
       {
-         //doHTTPRequest(&items, items.domain[items.domainPtr], items.ip[items.ipPtr]);
          doHTTPRequest(&items);
       }
    }
 
-   if (DEBUG == 1)
+   if (argDebug == 1)
    {
       printf("Domains\n");
       for(i=0;i<domainArraySize;i++)
