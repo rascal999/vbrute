@@ -6,7 +6,13 @@ IPs and vbrute will attempt to connect to IP with specific domain.
 
 Usage:
 
-vbrute domainsFile ipsFile
+```
+vbrute --domain-file <domain-file> --ip-file <ip-file>
+
+-d, --domain-file   Specify file containing a list of domains you want to test
+-i, --ip-file       Specify file containing a list of IP addresses you want to test
+-t, --timeout       Specify request timeout. Default is 5 seconds
+```
 
 Sample output:
 
