@@ -6,12 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define ITEMS_MAX 512
-#define ITEM_LENGTH_MAX 512
-#define DEBUG 1
+#include "../src/vbrute.h"
 
-char domain[ITEMS_MAX][ITEM_LENGTH_MAX];
-char ip[ITEMS_MAX][ITEM_LENGTH_MAX];
+#define DEBUG 0
 
 int debugPrintf(char msg[1024], ...)
 {
@@ -28,35 +25,46 @@ int debugPrintf(char msg[1024], ...)
    return 0;
 }
 
-void reqhandler(struct evhttp_request *req, void *state)
+int printResult(struct evhttp_request *req, Items *items)
 {
-    printf("in _reqhandler. state == %s\n", (char *) state);
-    if (req == NULL) {
-        printf("timed out!\n");
-    } else if (req->response_code == 0) {
-        printf("connection refused!\n");
-    } else if (req->response_code != 200) {
-        printf("error: %u %s\n", req->response_code, req->response_code_line);
-    } else {
-        printf("success: %u %s\n", req->response_code, req->response_code_line);
-    }
-    event_loopexit(NULL);
+   /* domain, ip, response code, lengeth */
+   printf("%-24.24s%-16.16s%-10u%-10.10s\n",items->domain[items->domainPtr],items->ip[items->ipPtr],req->response_code,evhttp_find_header(req->input_headers, "Content-Length"));
 }
 
-int doHTTPRequest(char *domain, const char *addr)
+void reqhandler(struct evhttp_request *req, void *vItems)
+{
+   /* Typecast */
+   Items *items = (Items *) vItems;
+
+   if (req == NULL) {
+      debugPrintf("timed out!\n");
+   } else if (req->response_code == 0) {
+      debugPrintf("connection refused!\n");
+   } else {
+      debugPrintf("success: %u %s\n", req->response_code, req->response_code_line);
+      debugPrintf("var == %s\n", evhttp_find_header(req->input_headers, "Content-Length"));
+      printResult(req,items);
+   }
+   event_loopexit(NULL);
+}
+
+//int doHTTPRequest(Items *items, char *domain, const char *addr)
+int doHTTPRequest(Items *items)
 {
    const char *state = "misc. state you can pass as argument to your handler";
    unsigned int port = 80;
    struct evhttp_connection *conn;
    struct evhttp_request *req;
 
-   printf("initializing libevent subsystem..\n");
+   debugPrintf("initializing libevent subsystem..\n");
    event_init();
 
-   conn = evhttp_connection_new(addr, port);
+   //conn = evhttp_connection_new(addr, port);
+   conn = evhttp_connection_new(items->ip[items->ipPtr], port);
 
-   req = evhttp_request_new(reqhandler, (void *) state);
-   evhttp_add_header(req->output_headers, "Host", domain);
+   req = evhttp_request_new(reqhandler, items);
+   //evhttp_add_header(req->output_headers, "Host", domain);
+   evhttp_add_header(req->output_headers, "Host", items->domain[items->domainPtr]);
    evhttp_add_header(req->output_headers, "Content-Length", "0");
    evhttp_make_request(conn, req, EVHTTP_REQ_GET, "/");
    event_dispatch();
@@ -91,6 +99,8 @@ char readFile(char *fileName, char itemArray[ITEMS_MAX][ITEM_LENGTH_MAX])
 
 int main(int argc, char **argv)
 {
+   Items items;
+
    char domainFile[ITEM_LENGTH_MAX], ipFile[ITEM_LENGTH_MAX];
    int i, j, domainArraySize, ipArraySize;
 
@@ -98,30 +108,38 @@ int main(int argc, char **argv)
    strcpy(ipFile,argv[2]);
 
    /* domain is 2d array */
-   domainArraySize = readFile(domainFile,domain);
+   domainArraySize = readFile(domainFile,items.domain);
    /* ip is 2d array */
-   ipArraySize = readFile(ipFile,ip);
+   ipArraySize = readFile(ipFile,items.ip);
 
-   /* for domains in file */
-   for(i=0;i<domainArraySize;i++)
+   /* for ips in file */
+   for(items.ipPtr=0;items.ipPtr<ipArraySize;items.ipPtr++)
    {
-      /* for ips in file */
-      for(j=0;j<domainArraySize;j++)
+      /* domain, ip, response code, lengeth */
+      printf("-----------------------------------------------------------\n");
+      printf("Domain                  IP              Code      Length\n");
+      printf("-----------------------------------------------------------\n");
+      /* for domains in file */
+      for(items.domainPtr=0;items.domainPtr<domainArraySize;items.domainPtr++)
       {
-         doHTTPRequest(domain[i], ip[j]);
+         //doHTTPRequest(&items, items.domain[items.domainPtr], items.ip[items.ipPtr]);
+         doHTTPRequest(&items);
       }
    }
 
-   printf("Domains\n");
-   for(i=0;i<domainArraySize;i++)
+   if (DEBUG == 1)
    {
-      printf("%s\n", domain[i]);
-   }
+      printf("Domains\n");
+      for(i=0;i<domainArraySize;i++)
+      {
+         printf("%s\n", items.domain[i]);
+      }
 
-   printf("IPs\n");
-   for(i=0;i<domainArraySize;i++)
-   {
-      printf("%s\n", ip[i]);
+      printf("IPs\n");
+      for(i=0;i<domainArraySize;i++)
+      {
+         printf("%s\n", items.ip[i]);
+      }
    }
 
    return 0;
