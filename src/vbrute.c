@@ -262,6 +262,8 @@ int main(int argc, char **argv)
    /* ip is 2d array */
    ipArraySize = readFile(argIPFile,items.ip);
 
+   printf("vbrute v0.1 by Aidan Marlin\n");
+
    /* for ips in file */
    for(items.ipPtr=0;items.ipPtr<ipArraySize;items.ipPtr++)
    {
